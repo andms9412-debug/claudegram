@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codexgram Repair"
+  short_description: "Diagnose Codexgram Telegram and service incidents"
+  default_prompt: "Use $codexgram-repair to diagnose and fix a Codexgram production alert."

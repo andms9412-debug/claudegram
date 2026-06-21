@@ -1,8 +1,10 @@
 <div align="center">
 
-# Claudegram
+# Codexgram
 
 **Your personal AI agent, running on your machine, controlled from Telegram.**
+
+Naming note: `Codexgram` is the user-facing project name. Existing `claudegram` paths, package names, service names, and Telegram bot artifacts are legacy runtime identifiers kept for compatibility until a dedicated migration is performed.
 
 [![Website](https://img.shields.io/badge/Website-claudegram.com-00ffd5?logo=googlechrome&logoColor=white)](https://claudegram.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -23,7 +25,7 @@
 
 ## What is this?
 
-Claudegram bridges Telegram to a **full Claude Code agent** running locally on your machine. Send a message in Telegram — Claude reads your files, runs commands, writes code, browses Reddit, fetches Medium articles, transcribes voice notes, and speaks responses back. All from your phone.
+Codexgram bridges Telegram to a **full Claude Code agent** running locally on your machine. Send a message in Telegram — Claude reads your files, runs commands, writes code, browses Reddit, fetches Medium articles, transcribes voice notes, and speaks responses back. All from your phone.
 
 This is not a simple API wrapper. It's the real Claude Code agent with tool access — Bash, file I/O, code editing, web browsing — packaged behind a Telegram interface with streaming responses, session memory, and rich output formatting.
 
@@ -407,6 +409,90 @@ If Claudegram is editing its own codebase, use **prod mode** to avoid hot-reload
 ```
 
 Then `/continue` or `/resume` in Telegram to restore your session.
+
+---
+
+## Production Operations
+
+Local production service:
+
+```bash
+sudo systemctl status claudegram.service
+sudo journalctl -u claudegram.service -n 120 --no-pager
+sudo systemctl restart claudegram.service
+```
+
+The systemd unit runs:
+
+```text
+/usr/bin/node /home/atun/claudegram/dist/index.js
+```
+
+Build before restarting production:
+
+```bash
+npm run typecheck
+npm run build
+sudo systemctl restart claudegram.service
+```
+
+### Startup Retry Incident - 2026-06-19
+
+Observed failure:
+
+- `claudegram.service` started before Telegram API connectivity was reliable.
+- `bot.init()` failed with `Request to 'getMe' timed out after 60 seconds`.
+- The old startup path treated that transient timeout as fatal, causing systemd failure notification even though the service could recover on restart.
+
+Fix:
+
+- `src/index.ts` retries Telegram startup initialization for transient errors only.
+- Retry policy: 10s initial delay, capped at 60s, maximum 20 minutes.
+- `401 Unauthorized` and `409 Conflict` are not retried; those still fail fast because they indicate bad token/auth or duplicate long-polling instances.
+- `setMyCommands` registration moved out of `createBot()` and now runs after successful init with the same transient retry behavior.
+
+Validation from the incident fix:
+
+```text
+2026-06-19T22:18:59+08:00 [startup] Telegram init failed, retrying in 10s (attempt 1): Request to 'getMe' timed out after 60 seconds
+2026-06-19T22:19:10+08:00 ✅ Bot started as @amaocutebot
+2026-06-19T22:19:11+08:00 📋 Command menu registered
+```
+
+Smoke-test checklist:
+
+- `npm run typecheck`
+- `npm run build`
+- `sudo systemctl restart claudegram.service`
+- `systemctl show claudegram.service -p ActiveState -p SubState -p ExecMainPID -p NRestarts`
+- `pgrep -af '/home/atun/claudegram/dist/index.js'` should show one process.
+- Do not call `getUpdates` manually while the service is running; it can create a false `409 Conflict` against the long-polling worker.
+- It is safe to call `getMe`, `getWebhookInfo`, or `sendMessage` for diagnostics.
+
+### Session Watch False Alert - 2026-06-20
+
+Observed alert:
+
+```text
+session watch: Claude session 已 N 分鐘無活動
+```
+
+This is not emitted by Codexgram. It comes from `~/.claude/scripts/session-stall-watch.sh`, run by user crontab every 30 minutes.
+
+Fix:
+
+- The watcher now first checks for a live `claude` / `claude-code` process.
+- If no Claude process exists, it exits without sending Telegram.
+- Only a live Claude process plus 60+ minutes of transcript inactivity should alert.
+- `/tmp/session_watch_off` remains the manual full-disable switch.
+
+Quick checks:
+
+```bash
+crontab -l | rg session-stall-watch
+ps -eo pid,ppid,stat,etimes,cmd | rg '(^|/| )claude( |$)|@anthropic-ai/claude|claude-code' | rg -v 'rg '
+stat -c '%y %n' /tmp/session_watch/alert_ts 2>/dev/null
+```
 
 ---
 

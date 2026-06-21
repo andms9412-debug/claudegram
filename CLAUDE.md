@@ -1,4 +1,10 @@
-# Claudegram Development Guidelines
+# Codexgram Development Guidelines
+
+Production operations and incident notes live in `README.md` under "Production Operations"; keep that section as the SSOT and do not duplicate operational runbooks elsewhere.
+
+Naming SSOT: the user-facing project name is `Codexgram`. Existing `claudegram` paths, package names, service names, and Telegram bot artifacts are legacy runtime identifiers kept only for compatibility until a dedicated migration is performed.
+
+Project-local repair skill: use `.codex/skills/codexgram-repair` for Codexgram/legacy Claudegram production alerts, Telegram polling issues, systemd service diagnosis, and session-watch false alarms.
 
 ## Website Maintenance (MANDATORY)
 

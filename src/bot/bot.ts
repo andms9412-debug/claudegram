@@ -1,4 +1,6 @@
-import { Bot, type Context } from 'grammy';
+import { Bot, type Context, GrammyError, HttpError } from 'grammy';
+import type { AbortSignal } from 'abort-controller';
+import type { BotCommand } from 'grammy/types';
 import { autoRetry } from '@grammyjs/auto-retry';
 import { sequentialize } from '@grammyjs/runner';
 import { HttpsProxyAgent } from 'https-proxy-agent';
@@ -70,40 +72,8 @@ function getSequentializeKey(ctx: Context): string | undefined {
   return buildSessionKey(chatId, threadId);
 }
 
-export async function createBot(): Promise<Bot> {
-  // Support HTTP/HTTPS/SOCKS proxy for Telegram API (useful in restricted networks)
-  const proxyUrl = config.TELEGRAM_PROXY_URL
-    || process.env.HTTPS_PROXY || process.env.https_proxy
-    || process.env.HTTP_PROXY || process.env.http_proxy;
-
-  const baseFetchConfig = proxyUrl
-    ? { agent: new HttpsProxyAgent(proxyUrl) }
-    : undefined;
-
-  if (proxyUrl) {
-    console.log(`[Bot] Using proxy: ${proxyUrl}`);
-  }
-
-  const bot = new Bot(config.TELEGRAM_BOT_TOKEN, {
-    client: {
-      // Default is 500s which causes long hangs on network interruptions.
-      // 60s is enough for long polling (30s) + file uploads while recovering
-      // from stuck connections much faster.
-      timeoutSeconds: 60,
-      baseFetchConfig,
-    },
-  });
-
-  // Auto-retry on transient network errors (ECONNRESET, socket hang up, etc.)
-  // Also handles 429 rate limits by respecting Telegram's retry_after
-  bot.api.config.use(autoRetry({
-    maxRetryAttempts: 5,
-    maxDelaySeconds: 60, // Cap retry delay at 60 seconds (will retry sooner rather than wait 900s)
-    rethrowInternalServerErrors: false, // Retry on 5xx errors
-  }));
-
-  // Register command menu for autocomplete (non-blocking)
-  const commandList = [
+function commandList(): BotCommand[] {
+  return [
     { command: 'start', description: '🚀 Show help and getting started' },
     { command: 'project', description: '📁 Set working directory' },
     { command: 'newproject', description: '📁 Create a new project' },
@@ -136,12 +106,43 @@ export async function createBot(): Promise<Bot> {
     { command: 'ping', description: '🏓 Check if bot is responsive' },
     { command: 'commands', description: '📜 List all commands' },
   ];
+}
 
-  bot.api.setMyCommands(commandList).then(() => {
-    console.log('📋 Command menu registered');
-  }).catch((err) => {
-    console.warn('⚠️ Failed to register commands:', err.message);
+export async function registerCommandMenu(bot: Bot, signal?: AbortSignal): Promise<void> {
+  await bot.api.setMyCommands(commandList(), undefined, signal);
+}
+
+export async function createBot(): Promise<Bot> {
+  // Support HTTP/HTTPS/SOCKS proxy for Telegram API (useful in restricted networks)
+  const proxyUrl = config.TELEGRAM_PROXY_URL
+    || process.env.HTTPS_PROXY || process.env.https_proxy
+    || process.env.HTTP_PROXY || process.env.http_proxy;
+
+  const baseFetchConfig = proxyUrl
+    ? { agent: new HttpsProxyAgent(proxyUrl) }
+    : undefined;
+
+  if (proxyUrl) {
+    console.log(`[Bot] Using proxy: ${proxyUrl}`);
+  }
+
+  const bot = new Bot(config.TELEGRAM_BOT_TOKEN, {
+    client: {
+      // Default is 500s which causes long hangs on network interruptions.
+      // 60s is enough for long polling (30s) + file uploads while recovering
+      // from stuck connections much faster.
+      timeoutSeconds: 60,
+      baseFetchConfig,
+    },
   });
+
+  // Auto-retry on transient network errors (ECONNRESET, socket hang up, etc.)
+  // Also handles 429 rate limits by respecting Telegram's retry_after
+  bot.api.config.use(autoRetry({
+    maxRetryAttempts: 5,
+    maxDelaySeconds: 60, // Cap retry delay at 60 seconds (will retry sooner rather than wait 900s)
+    rethrowInternalServerErrors: false, // Retry on 5xx errors
+  }));
 
   // Apply auth middleware to all updates
   bot.use(authMiddleware);
@@ -278,7 +279,14 @@ export async function createBot(): Promise<Bot> {
 
   // Error handler
   bot.catch((err) => {
-    console.error('Bot error:', err);
+    const e = err.error;
+    if (e instanceof GrammyError) {
+      console.error(`[BotCatch] GrammyError ${e.error_code}: ${e.description} | method=${e.method}`, e.payload ? JSON.stringify(e.payload).slice(0, 300) : '');
+    } else if (e instanceof HttpError) {
+      console.error(`[BotCatch] HttpError: ${e.message}`);
+    } else {
+      console.error('[BotCatch] Unhandled:', e);
+    }
   });
 
   return bot;
