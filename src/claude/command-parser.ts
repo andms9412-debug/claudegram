@@ -44,78 +44,78 @@ export function isClaudeCommand(message: string): boolean {
 export function getAvailableCommands(): string {
   const sections: Array<{ title: string; commands: string[] }> = [
     {
-      title: 'Claude Commands',
+      title: 'Claude 指令',
       commands: [
-        '• `/plan <task>` \\- Enter plan mode for complex tasks',
-        '• `/explore <question>` \\- Use explore agent for codebase questions',
-        '• `/loop <task>` \\- Run iteratively until task complete',
-        '• `/model \\[name\\]` \\- Show or set AI model',
-        ...(config.OPENCODE_ENABLED ? ['• `/provider` \\- Switch AI provider \\(Claude / OpenCode\\)'] : []),
-        '• `/commands` \\- Show this list',
+        '• `/plan <task>` \\- 進入規劃模式，處理複雜任務',
+        '• `/explore <question>` \\- 用探索代理搜尋程式碼庫',
+        '• `/loop <task>` \\- 反覆執行直到任務完成',
+        '• `/model \\[name\\]` \\- 顯示或切換 AI 模型',
+        ...(config.OPENCODE_ENABLED ? ['• `/provider` \\- 切換 AI 供應商（Claude / OpenCode）'] : []),
+        '• `/commands` \\- 顯示指令列表',
       ],
     },
     {
-      title: 'Session Commands',
+      title: '會話指令',
       commands: [
-        '• `/project <path>` \\- Set working directory',
-        '• `/newproject <name>` \\- Create a new project',
-        '• `/resume` \\- Pick from recent sessions to resume',
-        '• `/continue` \\- Resume most recent session',
-        '• `/sessions` \\- List all sessions',
-        '• `/teleport` \\- Move session to terminal \\(forked\\)',
-        '• `/clear` \\- Clear session and start fresh',
-        '• `/status` \\- Show current session info',
+        '• `/project <path>` \\- 設定工作目錄',
+        '• `/newproject <name>` \\- 建立新專案',
+        '• `/resume` \\- 從近期會話中選擇恢復',
+        '• `/continue` \\- 恢復最近一次會話',
+        '• `/sessions` \\- 列出所有會話',
+        '• `/teleport` \\- 將會話移到終端機（fork）',
+        '• `/clear` \\- 清除會話重新開始',
+        '• `/status` \\- 顯示目前會話資訊',
       ],
     },
     {
-      title: 'File Commands',
+      title: '檔案指令',
       commands: [
-        '• `/file <path>` \\- Download a file from project',
-        '• `/telegraph <path>` \\- View markdown with Instant View',
+        '• `/file <path>` \\- 下載專案中的檔案',
+        '• `/telegraph <path>` \\- 用 Instant View 檢視 Markdown',
       ],
     },
   ];
 
   const redditCommands: string[] = [];
   if (config.REDDIT_ENABLED) {
-    redditCommands.push('• `/reddit <target>` \\- Fetch Reddit posts, subreddits, or user profiles');
+    redditCommands.push('• `/reddit <target>` \\- 抓取 Reddit 貼文、子版或使用者資料');
   }
   if (config.VREDDIT_ENABLED) {
-    redditCommands.push('• `/vreddit <url>` \\- Download Reddit\\-hosted video from a post URL');
+    redditCommands.push('• `/vreddit <url>` \\- 下載 Reddit 影片');
   }
   if (redditCommands.length > 0) {
-    sections.push({ title: 'Reddit Commands', commands: redditCommands });
+    sections.push({ title: 'Reddit 指令', commands: redditCommands });
   }
 
   if (config.MEDIUM_ENABLED) {
     sections.push({
-      title: 'Medium Commands',
-      commands: ['• `/medium <url>` \\- Fetch Medium article with images'],
+      title: 'Medium 指令',
+      commands: ['• `/medium <url>` \\- 抓取 Medium 文章（含圖片）'],
     });
   }
 
   const mediaCommands: string[] = [];
   if (config.EXTRACT_ENABLED) {
-    mediaCommands.push('• `/extract <url>` \\- Extract text/audio/video from YouTube, Instagram, TikTok');
+    mediaCommands.push('• `/extract <url>` \\- 從 YouTube、Instagram、TikTok 擷取內容');
   }
   if (config.TRANSCRIBE_ENABLED) {
-    mediaCommands.push('• `/transcribe` \\- Transcribe audio to text \\(reply to voice/audio, or ForceReply\\)');
+    mediaCommands.push('• `/transcribe` \\- 語音轉文字（回覆語音訊息，或 ForceReply）');
   }
   if (mediaCommands.length > 0) {
-    sections.push({ title: 'Media Commands', commands: mediaCommands });
+    sections.push({ title: '媒體指令', commands: mediaCommands });
   }
 
   sections.push({
-    title: 'Bot Commands',
+    title: '機器人指令',
     commands: [
-      '• `/tts` \\- Toggle voice replies',
-      '• `/context` \\- Show Claude context usage',
-      '• `/botstatus` \\- Show bot process status',
-      '• `/restartbot` \\- Restart the bot process',
-      '• `/ping` \\- Check if bot is responsive',
-      '• `/cancel` \\- Cancel current request',
-      '• `/mode` \\- Toggle streaming mode',
-      '• `/terminalui` \\- Toggle terminal\\-style display',
+      '• `/tts` \\- 開關語音回覆',
+      '• `/context` \\- 顯示 Claude 上下文用量',
+      '• `/botstatus` \\- 顯示機器人狀態',
+      '• `/restartbot` \\- 重啟機器人',
+      '• `/ping` \\- 檢查機器人是否在線',
+      '• `/cancel` \\- 取消目前的請求',
+      '• `/mode` \\- 切換串流模式',
+      '• `/terminalui` \\- 切換終端機顯示風格',
     ],
   });
 

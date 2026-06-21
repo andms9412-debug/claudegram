@@ -76,7 +76,9 @@ export class MessageSender {
         await ctx.reply(part, { parse_mode: 'MarkdownV2' });
       } catch (error) {
         // MarkdownV2 failed — send as plain text chunks (raw text may exceed 4096 chars)
-        console.error('MarkdownV2 send failed, falling back to plain text:', error);
+        const code = error instanceof GrammyError ? error.error_code : 'N/A';
+        const desc = error instanceof GrammyError ? error.description : (error instanceof Error ? error.message : String(error));
+        console.error(`[Send] MarkdownV2 reply failed (${code}): ${desc} | part_len=${part.length}`);
         const plainChunks = splitMessage(text);
         for (const chunk of plainChunks) {
           await ctx.reply(chunk, { parse_mode: undefined });
@@ -334,11 +336,13 @@ export class MessageSender {
       }
       // Ignore "message not modified" and "message ID invalid" errors
       // The latter happens when streaming ends and message is replaced
-      if (error instanceof Error) {
+      if (error instanceof GrammyError) {
         const msg = error.message.toLowerCase();
         if (!msg.includes('message is not modified') && !msg.includes('message_id_invalid')) {
-          console.error('Error updating terminal stream:', error);
+          console.error(`[Stream] editMessageText failed: ${error.error_code} ${error.description} | content_len=${displayContent.length} | session=${state.sessionKey}`);
         }
+      } else if (error instanceof Error) {
+        console.error('[Stream] editMessageText unexpected error:', error.message);
       }
     }
   }
@@ -444,7 +448,9 @@ export class MessageSender {
             } else {
               // MarkdownV2 failed — delete streaming placeholder and
               // re-send via sendMessage which handles Telegraph + chunking
-              console.error('MarkdownV2 edit failed, falling back to sendMessage:', mdError);
+              const code = mdError instanceof GrammyError ? mdError.error_code : 'N/A';
+              const desc = mdError instanceof GrammyError ? mdError.description : (mdError instanceof Error ? mdError.message : String(mdError));
+              console.error(`[Stream] MarkdownV2 edit failed (${code}): ${desc} | content_len=${finalContent.length} | session=${sessionKey}`);
               try {
                 await ctx.api.deleteMessage(chatId, state.messageId);
               } catch { /* ignore */ }

@@ -259,14 +259,12 @@ export async function handleMessage(ctx: Context): Promise<void> {
     return;
   }
 
-  // Check for active session
-  const session = sessionManager.getSession(sessionKey);
+  // Check for active session — auto-create with WORKSPACE_DIR if none exists
+  let session = sessionManager.getSession(sessionKey);
   if (!session) {
-    await ctx.reply(
-      '⚠️ No project set\\.\n\nIf the bot restarted, use `/continue` or `/resume` to restore your last session\\.\nOr use `/project` to open a project first\\.',
-      { parse_mode: 'MarkdownV2' }
-    );
-    return;
+    const defaultDir = config.WORKSPACE_DIR || process.env.HOME || '.';
+    session = sessionManager.createSession(sessionKey, defaultDir);
+    console.log(`[Message] Auto-created session for ${sessionKey} with cwd: ${defaultDir}`);
   }
 
   // If CANCEL_ON_NEW_MESSAGE is enabled, auto-cancel the running query;

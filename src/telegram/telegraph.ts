@@ -62,7 +62,8 @@ export async function initTelegraph(): Promise<void> {
     });
 
     if (!response.ok) {
-      throw new Error(`Telegraph API error: ${response.statusText}`);
+      const body = await response.text().catch(() => '(no body)');
+      throw new Error(`Telegraph API error ${response.status}: ${response.statusText} | body=${body.slice(0, 300)}`);
     }
 
     const json = await response.json() as { ok: boolean; result?: { access_token?: string; auth_url?: string; short_name?: string }; error?: string };
@@ -440,13 +441,14 @@ async function createPageWithUuidTitle(
   });
 
   if (!response.ok) {
-    throw new Error(`Telegraph API error: ${response.statusText}`);
+    const body = await response.text().catch(() => '(no body)');
+    throw new Error(`Telegraph API error ${response.status}: ${response.statusText} | body=${body.slice(0, 300)}`);
   }
 
   const json = await response.json() as { ok: boolean; result?: { url?: string }; error?: string };
 
   if (!json.ok || !json.result || !json.result.url) {
-    throw new Error(json.error || 'Unknown Telegraph API error');
+    throw new Error(`Telegraph API error: ${json.error || 'missing url in response'}`);
   }
 
   return { url: json.result.url };
