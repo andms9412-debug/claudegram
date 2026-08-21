@@ -1,35 +1,35 @@
 ---
 name: codexgram-repair
-description: "Diagnose and repair Codexgram production incidents in this repo, including legacy Claudegram runtime names, Telegram bot delivery, systemd claudegram.service, getMe/getUpdates timeouts, 409 polling conflicts, startup retry regressions, and session-stall-watch false alerts such as /tmp/session_watch_off."
+description: "Diagnose and repair Codexgram production incidents in this repo, including legacy Claudegram runtime names, Telegram bot delivery, systemd service diagnosis, polling conflicts, startup retry regressions, and session-watch false alerts."
 ---
 
 # Codexgram Repair
 
-Use this skill for production repair of Codexgram, whose legacy runtime identifiers still use `claudegram`.
+Use this skill for production repair of Codexgram, whose legacy runtime identifiers may still use `claudegram`.
 
 ## Ground Rules
 
-- Treat `Codexgram` as the user-facing name and `claudegram` as legacy runtime compatibility.
-- Do not rename `/home/atun/claudegram`, `claudegram.service`, package names, env files, or Telegram bot artifacts during incident repair unless the user explicitly asks for a migration.
+- Treat `Codexgram` as the user-facing name and `claudegram` as a legacy runtime compatibility name.
+- Do not rename an existing checkout, service, package, env file, or Telegram bot artifact during incident repair unless the operator explicitly asks for a migration.
 - Never print `TELEGRAM_BOT_TOKEN` or other secrets.
-- Do not call Telegram `getUpdates` while `claudegram.service` is running; it can create a false `409 Conflict` with the long-polling worker.
+- Do not call Telegram `getUpdates` while the production service is running; it can create a false `409 Conflict` with the long-polling worker.
 - Prefer `getMe`, `getWebhookInfo`, and `sendMessage` for safe Telegram diagnostics.
-- Keep operational notes in `README.md` under `Production Operations`; that section is the project SSOT.
+- Keep public operational examples generic. Machine-specific paths, bot usernames, cron details, and incident identifiers belong in private operator notes rather than the public repository.
 
 ## First Triage
 
 1. Identify the alert source before changing code.
-   - Codexgram service: `systemctl status claudegram.service --no-pager`
+   - Service: `systemctl status claudegram.service --no-pager`
    - Service logs: `journalctl -u claudegram.service -n 160 --no-pager -o short-iso`
-   - User cron: `crontab -l`
-   - Session watch script: `~/.claude/scripts/session-stall-watch.sh`
+   - User cron, if relevant: `crontab -l`
+   - Any local session-watch script configured by the operator
 2. Check whether the production bot is alive.
    - `systemctl show claudegram.service -p ActiveState -p SubState -p ExecMainPID -p NRestarts -p ActiveEnterTimestamp`
-   - `pgrep -af '/home/atun/claudegram/dist/index.js'`
+   - `pgrep -af "$HOME/claudegram/dist/index.js"`
 3. Check safe Telegram API state without stealing polling.
-   - Source `/home/atun/claudegram/.env` without echoing it.
+   - Source the local `.env` without echoing it.
    - Use `getMe` to verify token/API reachability.
-   - Use `getWebhookInfo` to verify webhook is empty and pending updates are reasonable.
+   - Use `getWebhookInfo` to verify webhook state and pending updates.
 
 ## Known Incident Patterns
 
@@ -44,7 +44,7 @@ Fatal error: Error: Request to 'getMe' timed out after 60 seconds
 Expected fix state:
 
 - `src/index.ts` wraps `bot.init()` in bounded transient retry.
-- Retry policy: 10s initial delay, 60s max delay, 20 minutes max.
+- Retry policy uses an increasing delay with a bounded maximum duration.
 - `401 Unauthorized` and `409 Conflict` fail fast.
 - `src/bot/bot.ts` exports `registerCommandMenu()` and does not call `setMyCommands` inside `createBot()`.
 - Command menu registration runs after successful init with transient retry.
@@ -58,11 +58,11 @@ sudo systemctl restart claudegram.service
 journalctl -u claudegram.service --since '5 minutes ago' --no-pager -o short-iso
 ```
 
-Good recovery log:
+Representative recovery log:
 
 ```text
-[startup] Telegram init failed, retrying in 10s (attempt 1): Request to 'getMe' timed out after 60 seconds
-Bot started as @amaocutebot
+[startup] Telegram init failed, retrying after a transient timeout
+Bot started as @your_bot
 Command menu registered
 ```
 
@@ -91,33 +91,22 @@ systemctl status claudegram.service --no-pager
 
 Meaning:
 
-- Usually transient long-poll timeout.
+- Usually a transient long-poll timeout.
 - If the service stays active and one Node process remains, do not restart solely for this log.
 - Investigate only if it repeats with user-visible delivery failure.
 
-### `session watch` Alert
+### Session-watch Alert
 
-Symptom:
+A session-watch alert is not necessarily emitted by Codexgram itself. If the operator has a separate local watcher or cron job, inspect that configuration independently.
 
-```text
-session watch: Claude session already N minutes idle
-touch /tmp/session_watch_off
-```
-
-Meaning:
-
-- This is not Codexgram startup or Telegram polling.
-- Source is `~/.claude/scripts/session-stall-watch.sh`, run from user crontab.
-- It should alert only when a live Claude Code process exists and transcript files have not updated for 60+ minutes.
-
-Checks:
+Checks may include:
 
 ```bash
+crontab -l
 ps -eo pid,ppid,stat,etimes,cmd | rg '(^|/| )claude( |$)|@anthropic-ai/claude|claude-code' | rg -v 'rg '
-stat -c '%y %n' /tmp/session_watch/alert_ts 2>/dev/null
 ```
 
-If no Claude process exists, the script should exit without sending a Telegram alert.
+If no Claude process exists, a well-behaved external watcher should exit without sending an alert.
 
 ## Safe Smoke Test
 
@@ -128,13 +117,13 @@ npm run typecheck
 npm run build
 sudo systemctl restart claudegram.service
 systemctl show claudegram.service -p ActiveState -p SubState -p ExecMainPID -p NRestarts
-pgrep -af '/home/atun/claudegram/dist/index.js'
+pgrep -af "$HOME/claudegram/dist/index.js"
 ```
 
 Optional outbound Telegram test:
 
 ```bash
-cd /home/atun/claudegram
+cd "$HOME/claudegram"
 set -a
 . ./.env
 set +a
@@ -151,4 +140,4 @@ curl -fsS --connect-timeout 10 --max-time 30 \
 - State whether production was restarted.
 - State whether `typecheck` and `build` passed.
 - State current service status and PID.
-- Update `README.md` `Production Operations` if the repair changes diagnosis, commands, retry policy, service names, or alert handling.
+- Keep any machine-specific paths, usernames, chat identifiers, or private incident notes outside the public repository.
