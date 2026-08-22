@@ -423,20 +423,22 @@ sudo systemctl status claudegram.service
 sudo journalctl -u claudegram.service -n 120 --no-pager
 ```
 
-The unit can run the compiled entry point from an operator-owned checkout:
+The compiled entry point for a user-level systemd unit can be declared explicitly:
 
-```text
-/usr/bin/node $HOME/claudegram/dist/index.js
+```ini
+[Service]
+WorkingDirectory=%h/claudegram
+ExecStart=/usr/bin/node %h/claudegram/dist/index.js
 ```
 
-Validate a candidate build before scheduling a production restart:
+Validate a candidate build before scheduling any production change. Ordinary validation does not mutate a running service:
 
 ```bash
 npm run typecheck
 npm run build
 ```
 
-During an approved change window, the operator can restart and verify the service:
+Only with explicit operator authorization and during an approved production change window, an operator may restart and verify the service:
 
 ```bash
 sudo systemctl restart claudegram.service
@@ -467,10 +469,11 @@ Smoke-test checklist:
 
 - `npm run typecheck`
 - `npm run build`
-- Restart only during an approved production change window.
+- Use read-only service status checks before requesting any restart.
+- Production restart is not ordinary verification; it requires explicit operator authorization and an approved production change window.
 - Confirm the unit is active and exactly one expected Node process is running.
 - Do not call `getUpdates` manually while the service is running; it can create a false `409 Conflict` against the long-polling worker.
-- It is safe to call `getMe`, `getWebhookInfo`, or `sendMessage` for diagnostics.
+- If an outbound Telegram test is needed, use a private operator runbook; never put a bot token, chat ID, or other sensitive value in command-line arguments or logs.
 
 ### External Session-Watch Alerts
 

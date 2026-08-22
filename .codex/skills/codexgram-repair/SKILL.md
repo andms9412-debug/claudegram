@@ -54,9 +54,10 @@ Verify:
 ```bash
 npm run typecheck
 npm run build
-sudo systemctl restart claudegram.service
-journalctl -u claudegram.service --since '5 minutes ago' --no-pager -o short-iso
+systemctl show claudegram.service -p ActiveState -p SubState -p ExecMainPID -p NRestarts
 ```
+
+Restarting production is outside ordinary verification. It requires explicit operator authorization and an approved production change window; keep any restart and follow-up logs in a private operator runbook.
 
 Representative recovery log:
 
@@ -110,30 +111,18 @@ If no Claude process exists, a well-behaved external watcher should exit without
 
 ## Safe Smoke Test
 
-After a repair:
+After a repair, run only local build checks and read-only service checks:
 
 ```bash
 npm run typecheck
 npm run build
-sudo systemctl restart claudegram.service
 systemctl show claudegram.service -p ActiveState -p SubState -p ExecMainPID -p NRestarts
 pgrep -af "$HOME/claudegram/dist/index.js"
 ```
 
-Optional outbound Telegram test:
+A production restart is not part of ordinary verification. It requires explicit operator authorization and an approved production change window; keep the change and follow-up logs in a private operator runbook.
 
-```bash
-cd "$HOME/claudegram"
-set -a
-. ./.env
-set +a
-CHAT_ID="${ALLOWED_USER_IDS%%,*}"
-curl -fsS --connect-timeout 10 --max-time 30 \
-  -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-  -d chat_id="$CHAT_ID" \
-  --data-urlencode text="Codexgram smoke test OK: $(date '+%Y-%m-%d %H:%M:%S %Z')" \
-  | jq '{ok, message_id: .result.message_id, chat_id: .result.chat.id}'
-```
+If an outbound Telegram test is needed, use that private operator runbook. Never put a bot token, chat ID, or other sensitive value in command-line arguments or logs.
 
 ## Closeout
 
