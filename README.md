@@ -414,85 +414,79 @@ Then `/continue` or `/resume` in Telegram to restore your session.
 
 ## Production Operations
 
-Local production service:
+This section is a generic operator reference. Keep machine-specific paths, bot usernames, cron schedules, and incident timelines in private operator notes.
+
+A systemd deployment may use the legacy service name:
 
 ```bash
 sudo systemctl status claudegram.service
 sudo journalctl -u claudegram.service -n 120 --no-pager
-sudo systemctl restart claudegram.service
 ```
 
-The systemd unit runs:
+The compiled entry point for a user-level systemd unit can be declared explicitly:
 
-```text
-/usr/bin/node /home/atun/claudegram/dist/index.js
+```ini
+[Service]
+WorkingDirectory=%h/claudegram
+ExecStart=/usr/bin/node %h/claudegram/dist/index.js
 ```
 
-Build before restarting production:
+Validate a candidate build before scheduling any production change. Ordinary validation does not mutate a running service:
 
 ```bash
 npm run typecheck
 npm run build
-sudo systemctl restart claudegram.service
 ```
 
-### Startup Retry Incident - 2026-06-19
+Only with explicit operator authorization and during an approved production change window, an operator may restart and verify the service:
 
-Observed failure:
+```bash
+sudo systemctl restart claudegram.service
+systemctl show claudegram.service -p ActiveState -p SubState -p ExecMainPID -p NRestarts
+pgrep -af "$HOME/claudegram/dist/index.js"
+```
 
-- `claudegram.service` started before Telegram API connectivity was reliable.
-- `bot.init()` failed with `Request to 'getMe' timed out after 60 seconds`.
-- The old startup path treated that transient timeout as fatal, causing systemd failure notification even though the service could recover on restart.
+### Startup Retry Troubleshooting
 
-Fix:
+A transient Telegram API timeout during startup can prevent `bot.init()` from completing on its first attempt.
+
+Expected behavior:
 
 - `src/index.ts` retries Telegram startup initialization for transient errors only.
-- Retry policy: 10s initial delay, capped at 60s, maximum 20 minutes.
+- Retry delay increases within a bounded maximum duration.
 - `401 Unauthorized` and `409 Conflict` are not retried; those still fail fast because they indicate bad token/auth or duplicate long-polling instances.
 - `setMyCommands` registration moved out of `createBot()` and now runs after successful init with the same transient retry behavior.
 
-Validation from the incident fix:
+Representative recovery output:
 
 ```text
-2026-06-19T22:18:59+08:00 [startup] Telegram init failed, retrying in 10s (attempt 1): Request to 'getMe' timed out after 60 seconds
-2026-06-19T22:19:10+08:00 ✅ Bot started as @amaocutebot
-2026-06-19T22:19:11+08:00 📋 Command menu registered
+[startup] Telegram init failed, retrying after a transient timeout
+Bot started as @your_bot
+Command menu registered
 ```
 
 Smoke-test checklist:
 
 - `npm run typecheck`
 - `npm run build`
-- `sudo systemctl restart claudegram.service`
-- `systemctl show claudegram.service -p ActiveState -p SubState -p ExecMainPID -p NRestarts`
-- `pgrep -af '/home/atun/claudegram/dist/index.js'` should show one process.
+- Use read-only service status checks before requesting any restart.
+- Production restart is not ordinary verification; it requires explicit operator authorization and an approved production change window.
+- Confirm the unit is active and exactly one expected Node process is running.
 - Do not call `getUpdates` manually while the service is running; it can create a false `409 Conflict` against the long-polling worker.
-- It is safe to call `getMe`, `getWebhookInfo`, or `sendMessage` for diagnostics.
+- If an outbound Telegram test is needed, use a private operator runbook; never put a bot token, chat ID, or other sensitive value in command-line arguments or logs.
 
-### Session Watch False Alert - 2026-06-20
+### External Session-Watch Alerts
 
-Observed alert:
+A separate local watcher or cron job may emit session-idle alerts that are unrelated to Codexgram startup or Telegram polling. Inspect that operator-managed configuration independently. A well-behaved watcher should first confirm that a relevant process exists before treating transcript inactivity as a problem.
 
-```text
-session watch: Claude session 已 N 分鐘無活動
-```
-
-This is not emitted by Codexgram. It comes from `~/.claude/scripts/session-stall-watch.sh`, run by user crontab every 30 minutes.
-
-Fix:
-
-- The watcher now first checks for a live `claude` / `claude-code` process.
-- If no Claude process exists, it exits without sending Telegram.
-- Only a live Claude process plus 60+ minutes of transcript inactivity should alert.
-- `/tmp/session_watch_off` remains the manual full-disable switch.
-
-Quick checks:
+Generic checks may include:
 
 ```bash
-crontab -l | rg session-stall-watch
+crontab -l
 ps -eo pid,ppid,stat,etimes,cmd | rg '(^|/| )claude( |$)|@anthropic-ai/claude|claude-code' | rg -v 'rg '
-stat -c '%y %n' /tmp/session_watch/alert_ts 2>/dev/null
 ```
+
+Use the watcher's documented operator-specific mechanism to disable or reconfigure it; do not publish private script paths, temporary-state paths, schedules, or alert history in this repository.
 
 ---
 
